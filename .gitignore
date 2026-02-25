@@ -1,0 +1,18 @@
+# data
+data/raw/
+data/processed/
+
+# outputs
+results/models/
+results/figures/
+results/metrics/
+
+# python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.env
+.venv
+
+# OS
+.DS_Store
