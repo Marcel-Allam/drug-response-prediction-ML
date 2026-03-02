@@ -1,0 +1,75 @@
+# config/default_config.yaml
+#
+# Purpose:
+#   Single source of truth for dataset paths, schema expectations,
+#   model settings, and reproducibility controls.
+
+project:
+  name: "drug-response-prediction-ML"
+  seed: 42
+
+paths:
+  repo_root: "."
+  raw:
+    gdsc_dir: "data/raw/gdsc"
+    depmap_dir: "data/raw/depmap"
+  interim:
+    harmonised_dir: "data/interim/harmonised"
+  processed:
+    per_drug_dir: "data/processed/per_drug"
+  reports:
+    tables_dir: "reports/tables"
+  results:
+    metrics_dir: "results/metrics"
+    plots_dir: "results/plots"
+
+files:
+  gdsc:
+    response: "gdsc_drug_response.csv"
+    expression: ""   # keep optional for now
+  depmap:
+    expression: "depmap_expression.csv"
+    prism_response: "depmap_prism_response.csv"
+
+schema:
+  ids:
+    # We'll confirm these from the inspection step once files exist.
+    gdsc_cell_line_id_candidates:
+      - "COSMIC_ID"
+      - "CELL_LINE_NAME"
+      - "Cell line name"
+    depmap_cell_line_id_candidates:
+      - "DepMap_ID"
+      - "CCLE_Name"
+  genes:
+    # We'll infer from inspection, but you can force later.
+    gene_id_type: "auto"  # auto | hgnc | ensembl
+  response:
+    task_primary: "regression"     # regression primary
+    task_secondary: "classification"
+    classification_quantiles:
+      low: 0.25
+      high: 0.75
+
+filters:
+  min_samples_per_drug: 100
+
+evaluation:
+  cv_folds: 5
+  scoring:
+    regression:
+      - "r2"
+      - "rmse"
+      - "pearsonr"
+    classification:
+      - "roc_auc"
+      - "average_precision"
+      - "brier"
+
+models:
+  elasticnet:
+    l1_ratio_grid: [0.1, 0.5, 0.9]
+  xgboost:
+    enabled: true
+  mlp:
+    enabled: true
