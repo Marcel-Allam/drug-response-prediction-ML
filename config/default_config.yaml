@@ -25,7 +25,7 @@ paths:
 
 files:
   gdsc:
-    response: "gdsc_drug_response.csv"
+    response: "gdsc_response.xlsx"
     expression: ""   # keep optional for now
   depmap:
     expression: "depmap_expression.csv"
