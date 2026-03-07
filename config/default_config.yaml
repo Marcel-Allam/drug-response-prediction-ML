@@ -30,6 +30,7 @@ files:
   depmap:
     expression: "depmap_expression.csv"
     prism_response: "depmap_prism_response.csv"
+    model_metadata: "model.csv"
 
 schema:
   ids:

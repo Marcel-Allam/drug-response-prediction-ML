@@ -130,7 +130,7 @@ def load_config(config_path: Path) -> dict[str, Any]:
     return config
 
 
-def resolve_paths(config: dict[str, Any]) -> tuple[Path, Path, Path]:
+def resolve_paths(config: dict[str, Any]) -> tuple[Path, Path, Path, Path]:
     paths = require_mapping(require_key(config, "paths", "root"), "paths")
     files = require_mapping(require_key(config, "files", "root"), "files")
 
@@ -163,8 +163,13 @@ def resolve_paths(config: dict[str, Any]) -> tuple[Path, Path, Path]:
         require_key(depmap_files, "expression", "files.depmap"),
         "files.depmap.expression",
     )
+    model_metadata_path = resolve_relative_file(
+        depmap_dir,
+        require_key(depmap_files, "model_metadata", "files.depmap"),
+        "files.depmap.model_metadata",
+    )
 
-    return gdsc_path, depmap_path, per_drug_dir
+    return gdsc_path, depmap_path, model_metadata_path, per_drug_dir
 
 
 # ----------------------------- DATA LOADING --------------------------------- #
@@ -228,43 +233,49 @@ def load_depmap_expression(path: Path) -> pd.DataFrame:
         raise SystemExit(1) from exc
 
 
-def detect_gdsc_columns(df: pd.DataFrame) -> tuple[str, str, str]:
-    columns = [str(col) for col in df.columns]
+def load_model_metadata(path: Path) -> pd.DataFrame:
+    if path.suffix.lower() != ".csv":
+        log_error(f"DepMap model metadata file must be a .csv file, got: {path.name}")
+        raise SystemExit(1)
+    try:
+        return pd.read_csv(path)
+    except Exception as exc:
+        log_error(f"Failed to load DepMap model metadata file '{path}': {exc}")
+        raise SystemExit(1) from exc
 
-    drug_col = resolve_required_column(
-        "drug name",
-        detect_column_candidates(
-            columns,
-            ["DRUG_NAME", "Drug Name", "DRUG", "COMPOUND_NAME", "Compound", "drug"],
-        ),
-    )
-    cell_line_col = resolve_required_column(
-        "cell line identifier",
-        detect_column_candidates(
-            columns,
-            [
-                "CELL_LINE_NAME",
-                "Cell line name",
-                "CELL_LINE",
-                "CCLE_NAME",
-                "MODEL_ID",
-                "ModelID",
-                "DepMap_ID",
-                "COSMIC_ID",
-                "COSMIC ID",
-                "cell line",
-            ],
-        ),
-    )
+
+def detect_gdsc_columns(df: pd.DataFrame) -> tuple[str, str, str]:
+    gdsc_columns = [str(col) for col in df.columns]
+
+    if "DRUG_NAME" in gdsc_columns:
+        drug_name_col = "DRUG_NAME"
+    else:
+        drug_name_col = resolve_required_column(
+            "drug name",
+            detect_column_candidates(
+                gdsc_columns,
+                ["DRUG_NAME", "Drug Name", "DRUG", "COMPOUND_NAME", "Compound", "drug"],
+            ),
+        )
+    if "COSMIC_ID" in gdsc_columns:
+        cell_line_id_col = "COSMIC_ID"
+    else:
+        cell_line_id_col = resolve_required_column(
+            "cell line identifier",
+            detect_column_candidates(
+                gdsc_columns,
+                ["COSMIC_ID", "COSMIC ID", "CELL_LINE_NAME", "Cell line name", "SANGER_MODEL_ID"],
+            ),
+        )
     ln_ic50_col = resolve_required_column(
         "LN_IC50",
         detect_column_candidates(
-            columns,
+            gdsc_columns,
             ["LN_IC50", "ln_ic50", "LN IC50", "LNIC50", "LOG_IC50", "log ic50"],
         ),
     )
 
-    return drug_col, cell_line_col, ln_ic50_col
+    return drug_name_col, cell_line_id_col, ln_ic50_col
 
 
 def detect_depmap_id_column(df: pd.DataFrame) -> str:
@@ -278,6 +289,22 @@ def detect_depmap_id_column(df: pd.DataFrame) -> str:
     )
 
 
+def detect_model_metadata_columns(df: pd.DataFrame) -> tuple[str, str]:
+    model_columns = [str(col) for col in df.columns]
+    if "ModelID" in model_columns:
+        depmap_model_id_col = "ModelID"
+    else:
+        depmap_model_id_col = resolve_required_column(
+            "DepMap model identifier",
+            detect_column_candidates(model_columns, ["ModelID", "SangerModelID", "ModelIDAlias"]),
+        )
+    cosmic_id_col = resolve_required_column(
+        "COSMIC identifier",
+        detect_column_candidates(model_columns, ["COSMIC_ID", "COSMICID"]),
+    )
+    return depmap_model_id_col, cosmic_id_col
+
+
 def standardise_join_key(series: pd.Series) -> pd.Series:
     return (
         series.astype("string")
@@ -287,16 +314,26 @@ def standardise_join_key(series: pd.Series) -> pd.Series:
     )
 
 
+def standardize_cosmic_id(series: pd.Series) -> pd.Series:
+    cleaned = series.astype("string").str.strip()
+    cleaned = cleaned.replace({"": pd.NA, "nan": pd.NA, "None": pd.NA, "NA": pd.NA, "<NA>": pd.NA})
+    cleaned = cleaned.str.replace(r"\.0$", "", regex=True)
+    return cleaned
+
+
 # ----------------------------- DATA MERGE ----------------------------------- #
 
 def build_single_drug_dataset(
     gdsc_df: pd.DataFrame,
     depmap_df: pd.DataFrame,
+    model_df: pd.DataFrame,
     drug_name: str,
     gdsc_drug_col: str,
     gdsc_cell_col: str,
     gdsc_ln_ic50_col: str,
     depmap_id_col: str,
+    model_id_col: str,
+    model_cosmic_id_col: str,
 ) -> pd.DataFrame:
     if gdsc_df.empty:
         log_error("GDSC response table is empty.")
@@ -310,13 +347,26 @@ def build_single_drug_dataset(
     if gdsc_filtered.empty:
         log_error(f"No rows found in GDSC response table for drug '{drug_name}'.")
         raise SystemExit(1)
+    log_info(f"GDSC drug subset rows: {len(gdsc_filtered)}")
 
-    gdsc_filtered["__join_id"] = standardise_join_key(gdsc_filtered[gdsc_cell_col])
-    depmap_work = depmap_df.copy()
-    depmap_work["__join_id"] = standardise_join_key(depmap_work[depmap_id_col])
+    depmap_with_model = depmap_df.merge(
+        model_df[[model_id_col, model_cosmic_id_col]],
+        how="left",
+        left_on=depmap_id_col,
+        right_on=model_id_col,
+    )
+    log_info(f"DepMap expression rows after adding model metadata: {len(depmap_with_model)}")
 
-    gdsc_filtered = gdsc_filtered[gdsc_filtered["__join_id"].notna() & (gdsc_filtered["__join_id"] != "")]
-    depmap_work = depmap_work[depmap_work["__join_id"].notna() & (depmap_work["__join_id"] != "")]
+    depmap_work = depmap_with_model.copy()
+    depmap_work["COSMIC_ID"] = depmap_work[model_cosmic_id_col]
+
+    gdsc_filtered["COSMIC_ID"] = standardize_cosmic_id(gdsc_filtered[gdsc_cell_col])
+    depmap_work["COSMIC_ID"] = standardize_cosmic_id(depmap_work["COSMIC_ID"])
+
+    gdsc_filtered = gdsc_filtered[gdsc_filtered["COSMIC_ID"].notna() & (gdsc_filtered["COSMIC_ID"] != "")]
+    depmap_work = depmap_work[depmap_work["COSMIC_ID"].notna() & (depmap_work["COSMIC_ID"] != "")]
+    log_info(f"GDSC rows remaining after dropping missing COSMIC_ID: {len(gdsc_filtered)}")
+    log_info(f"DepMap rows remaining after dropping missing COSMIC_ID: {len(depmap_work)}")
     if gdsc_filtered.empty:
         log_error("No valid GDSC cell line identifiers remain after cleaning.")
         raise SystemExit(1)
@@ -324,7 +374,18 @@ def build_single_drug_dataset(
         log_error("No valid DepMap model identifiers remain after cleaning.")
         raise SystemExit(1)
 
-    merged = gdsc_filtered.merge(depmap_work, how="inner", on="__join_id", suffixes=("_gdsc", "_depmap"))
+    gdsc_unique_ids = set(gdsc_filtered["COSMIC_ID"].dropna().astype(str).unique().tolist())
+    depmap_unique_ids = set(depmap_work["COSMIC_ID"].dropna().astype(str).unique().tolist())
+    overlap_ids = gdsc_unique_ids & depmap_unique_ids
+    log_info(f"Unique COSMIC_ID in GDSC drug subset: {len(gdsc_unique_ids)}")
+    log_info(f"Unique COSMIC_ID in DepMap merged expression table: {len(depmap_unique_ids)}")
+    log_info(f"COSMIC_ID intersection size: {len(overlap_ids)}")
+    log_info(f"GDSC COSMIC_ID sample (first 10): {sorted(gdsc_unique_ids)[:10]}")
+    log_info(f"DepMap COSMIC_ID sample (first 10): {sorted(depmap_unique_ids)[:10]}")
+    log_info(f"Overlapping COSMIC_ID sample (first 10): {sorted(overlap_ids)[:10]}")
+
+    merged = gdsc_filtered.merge(depmap_work, how="inner", on="COSMIC_ID", suffixes=("_gdsc", "_depmap"))
+    log_info(f"Rows after final merge: {len(merged)}")
     if merged.empty:
         log_error("Merge produced zero rows. Check cell line identifier compatibility between GDSC and DepMap.")
         raise SystemExit(1)
@@ -430,29 +491,36 @@ def main() -> None:
     log_info(f"Requested drug: {args.drug}")
 
     config = load_config(config_path)
-    gdsc_path, depmap_path, per_drug_dir = resolve_paths(config)
+    gdsc_path, depmap_path, model_metadata_path, per_drug_dir = resolve_paths(config)
 
     log_info(f"Resolved GDSC response path: {gdsc_path}")
     log_info(f"Resolved DepMap expression path: {depmap_path}")
+    log_info(f"Resolved DepMap model metadata path: {model_metadata_path}")
     log_info(f"Resolved output directory: {per_drug_dir}")
 
     gdsc_df = load_gdsc_response(gdsc_path)
     depmap_df = load_depmap_expression(depmap_path)
+    model_df = load_model_metadata(model_metadata_path)
 
     log_info(f"GDSC shape: {gdsc_df.shape}")
     log_info(f"DepMap shape: {depmap_df.shape}")
+    log_info(f"Model metadata shape: {model_df.shape}")
 
     gdsc_drug_col, gdsc_cell_col, gdsc_ln_ic50_col = detect_gdsc_columns(gdsc_df)
     depmap_id_col = detect_depmap_id_column(depmap_df)
+    model_id_col, model_cosmic_id_col = detect_model_metadata_columns(model_df)
 
     output_df = build_single_drug_dataset(
         gdsc_df=gdsc_df,
         depmap_df=depmap_df,
+        model_df=model_df,
         drug_name=args.drug,
         gdsc_drug_col=gdsc_drug_col,
         gdsc_cell_col=gdsc_cell_col,
         gdsc_ln_ic50_col=gdsc_ln_ic50_col,
         depmap_id_col=depmap_id_col,
+        model_id_col=model_id_col,
+        model_cosmic_id_col=model_cosmic_id_col,
     )
 
     out_path = save_dataset(output_df, per_drug_dir, args.drug)
