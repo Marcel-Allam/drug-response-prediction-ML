@@ -55,7 +55,7 @@ Biological Interpretation
 
 # Data Sources
 
-This project uses publicly available pharmacogenomics datasets derived from large-scale cancer cell line screens such as:
+This project uses publicly available pharmacogenomics datasets derived from large-scale cancer cell line screens such as:[]
 
 - **GDSC (Genomics of Drug Sensitivity in Cancer)**
 - **CCLE (Cancer Cell Line Encyclopedia)**
@@ -144,29 +144,29 @@ results/enrichment/*_enrichment_sig.csv
 
 # Example Result (Selumetinib)
 
-Pathway enrichment identified a significant biological process:
+Pathway enrichment of ElasticNet-selected genes identified a significant Gene Ontology biological process:
 
-```
-Defense Response To Gram-negative Bacterium
+Defense Response To Gram-negative Bacterium  
 Adjusted p-value = 0.00618
-```
 
-Genes contributing to this signal:
+Genes contributing to this enrichment include:
 
-```
-IL23A
-DEFA4
-DEFA3
-CTSG
-DEFA1
-LYZ
-TLR4
-LYPD8
-```
+IL23A  
+DEFA4  
+DEFA3  
+CTSG  
+DEFA1  
+LYZ  
+TLR4  
+LYPD8  
 
-These genes are involved in **innate immune signalling and inflammatory responses**, suggesting that immune-associated transcriptional programs may influence Selumetinib sensitivity across cancer cell lines.
+These genes are involved in innate immune signaling and antimicrobial defense pathways.
 
----
+The presence of these genes suggests that transcriptional programs related to inflammatory and innate immune signaling may correlate with Selumetinib sensitivity across cancer cell lines.
+
+Notably, several of these genes (e.g., TLR4 and IL23A) participate in pathways that interact with MAPK signaling, the pathway targeted by Selumetinib.
+
+This demonstrates that machine learning-derived gene signatures can recover biologically meaningful pathways associated with drug response.
 
 # Visualization
 
