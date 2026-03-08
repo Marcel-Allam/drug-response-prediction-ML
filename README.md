@@ -4,95 +4,81 @@ Machine learning pipeline for predicting **cancer drug response (IC50)** from **
 
 This project demonstrates how **machine learning models trained on transcriptomic data can identify biologically meaningful pathways associated with drug sensitivity.**
 
-The pipeline integrates:
+---
 
-- transcriptomic datasets
-- pharmacological response measurements
-- ElasticNet regression modelling
-- pathway enrichment analysis
-- reproducible bioinformatics workflows
+# Project Overview
+
+This repository implements a reproducible bioinformatics pipeline that:
+
+1. Integrates **transcriptomic data with pharmacological response measurements**
+2. Trains an **ElasticNet regression model** to predict drug sensitivity
+3. Extracts genes driving model predictions
+4. Performs **pathway enrichment analysis**
+5. Produces interpretable biological results and visualizations
+
+The workflow is demonstrated using the MEK inhibitor **Selumetinib**.
 
 ---
 
-# Project Objective
+# Analysis Pipeline
 
-The goal of this project is to determine whether **gene expression profiles can predict cancer cell line sensitivity to targeted therapies** and to interpret the resulting predictive features biologically.
+The full pipeline is shown below.
 
-Specifically, this project:
-
-1. Trains a **regularized regression model (ElasticNet)** to predict drug response
-2. Identifies genes most strongly associated with drug sensitivity
-3. Performs **pathway enrichment analysis** on model-selected genes
-4. Generates publication-style plots summarizing enriched pathways
-
-The project focuses on the MEK inhibitor **Selumetinib** as a case study.
-
----
-
-# Biological Motivation
-
-Drug response in cancer is driven by complex molecular programs involving:
-
-- signalling pathway activation
-- immune response
-- metabolic state
-- transcriptional regulation
-
-While machine learning models can predict drug sensitivity, **interpreting the biological meaning of model features is essential**.
-
-This project therefore integrates **machine learning with pathway enrichment** to determine whether predictive genes converge on meaningful biological processes.
+```
+Gene Expression Data
+        │
+        ▼
+Drug Response Integration
+        │
+        ▼
+Per-Drug Dataset Generation
+        │
+        ▼
+ElasticNet Model Training
+        │
+        ▼
+Feature Selection
+(non-zero coefficients)
+        │
+        ▼
+Gene List Extraction
+        │
+        ▼
+Pathway Enrichment Analysis
+(KEGG / Reactome / GO)
+        │
+        ▼
+Biological Interpretation
+```
 
 ---
 
 # Data Sources
 
-This project uses publicly available pharmacogenomics datasets derived from large-scale cancer cell line screens.
-
-Typical data sources used in these studies include:
+This project uses publicly available pharmacogenomics datasets derived from large-scale cancer cell line screens such as:
 
 - **GDSC (Genomics of Drug Sensitivity in Cancer)**
 - **CCLE (Cancer Cell Line Encyclopedia)**
 
-These datasets contain:
+These resources provide:
 
 - genome-wide gene expression profiles
 - drug response measurements (IC50)
 - hundreds of cancer cell lines
 
-For each drug, the pipeline constructs a **per-drug dataset combining gene expression features with drug response values**.
+For each drug, the pipeline builds a **per-drug dataset linking gene expression with drug response.**
 
 ---
 
-# Pipeline Overview
+# Machine Learning Model
 
-The analysis pipeline consists of the following steps.
+Drug response prediction is performed using **ElasticNet regression**.
 
-## 1. Data Integration
+ElasticNet is suitable for transcriptomic data because it:
 
-Gene expression data are merged with drug response measurements.
-
-Output:
-
-```
-data/processed/per_drug/<drug>.parquet
-```
-
-Each dataset contains:
-
-- gene expression features
-- LN_IC50 drug response values
-
----
-
-## 2. Machine Learning Model
-
-An **ElasticNet regression model** is trained to predict drug response.
-
-ElasticNet was chosen because it:
-
-- performs feature selection
-- handles high-dimensional transcriptomic data
-- balances L1 and L2 regularisation
+- performs **automatic feature selection**
+- handles **high-dimensional gene expression data**
+- reduces model overfitting via **regularisation**
 
 Model evaluation metrics:
 
@@ -106,7 +92,7 @@ R²   = 0.52
 RMSE = 1.30
 ```
 
-Outputs:
+Model outputs:
 
 ```
 results/models/<drug>_elasticnet.joblib
@@ -115,37 +101,32 @@ results/metrics/<drug>_elasticnet_metrics.json
 
 ---
 
-## 3. Feature Extraction
+# Feature Selection
 
-Genes with **non-zero model coefficients** are extracted as candidate predictors of drug response.
+Genes with **non-zero ElasticNet coefficients** are interpreted as predictors of drug response.
 
-Two ranked feature sets are generated:
-
-- **Top model features**
-- **All non-zero coefficients**
-
-Outputs:
+Two feature tables are generated:
 
 ```
 results/metrics/<drug>_elasticnet_top_features.csv
 results/metrics/<drug>_elasticnet_all_nonzero_features.csv
 ```
 
-Gene symbols are then extracted for downstream analysis.
+These genes are then converted into a clean **gene symbol list** for pathway analysis.
 
 ---
 
-## 4. Pathway Enrichment Analysis
+# Pathway Enrichment Analysis
 
-Model-derived gene lists are analysed using **Enrichr via gseapy** to identify enriched biological pathways.
+Gene lists are analysed using **Enrichr via gseapy**.
 
 Databases queried:
 
-- KEGG
-- Reactome
-- Gene Ontology (Biological Process)
+- **KEGG**
+- **Reactome**
+- **Gene Ontology (Biological Process)**
 
-Outputs:
+Output tables:
 
 ```
 results/enrichment/<drug>_kegg_enrichment.csv
@@ -161,23 +142,7 @@ results/enrichment/*_enrichment_sig.csv
 
 ---
 
-## 5. Visualization
-
-Pathway enrichment results are visualized as **bar plots of –log10(adjusted p-values)**.
-
-Outputs:
-
-```
-results/plots/<drug>_kegg_barplot.png
-results/plots/<drug>_reactome_barplot.png
-results/plots/<drug>_gobp_barplot.png
-```
-
-These figures summarise the most enriched biological processes associated with model-selected genes.
-
----
-
-# Key Result (Selumetinib)
+# Example Result (Selumetinib)
 
 Pathway enrichment identified a significant biological process:
 
@@ -186,7 +151,7 @@ Defense Response To Gram-negative Bacterium
 Adjusted p-value = 0.00618
 ```
 
-Genes contributing to this enrichment include:
+Genes contributing to this signal:
 
 ```
 IL23A
@@ -199,9 +164,25 @@ TLR4
 LYPD8
 ```
 
-These genes are involved in **innate immune signalling and inflammatory responses**, suggesting that transcriptional immune programs may be associated with Selumetinib sensitivity across cell lines.
+These genes are involved in **innate immune signalling and inflammatory responses**, suggesting that immune-associated transcriptional programs may influence Selumetinib sensitivity across cancer cell lines.
 
-While further validation is required, this demonstrates that **machine learning-derived gene sets can recover biologically meaningful pathways.**
+---
+
+# Visualization
+
+Pathway enrichment results are visualised as **bar plots of –log10(adjusted p-values)**.
+
+Example outputs:
+
+```
+results/plots/selumetinib_kegg_barplot.png
+results/plots/selumetinib_reactome_barplot.png
+results/plots/selumetinib_gobp_barplot.png
+```
+
+Example figure:
+
+![GO Enrichment Plot](results/plots/selumetinib_gobp_barplot.png)
 
 ---
 
@@ -233,7 +214,7 @@ results/
 
 # Example Usage
 
-Train the model:
+### Train the model
 
 ```bash
 python scripts/04_train_elasticnet_model.py \
@@ -241,7 +222,7 @@ python scripts/04_train_elasticnet_model.py \
 --drug "Selumetinib"
 ```
 
-Extract gene symbols:
+### Extract gene symbols
 
 ```bash
 python scripts/05_extract_gene_symbols.py \
@@ -250,7 +231,7 @@ python scripts/05_extract_gene_symbols.py \
 --top_n 250
 ```
 
-Run pathway enrichment:
+### Run pathway enrichment
 
 ```bash
 python scripts/06_run_pathway_enrichment.py \
@@ -259,11 +240,23 @@ python scripts/06_run_pathway_enrichment.py \
 --top_n 250
 ```
 
-Generate plots:
+### Generate enrichment plots
 
 ```bash
 python scripts/07_plot_enrichment_results.py \
 --drug "Selumetinib"
+```
+
+---
+
+# Reproducibility
+
+Create the required environment:
+
+```
+conda create -n drug_response_env python=3.11
+conda activate drug_response_env
+pip install pandas numpy scikit-learn matplotlib gseapy pyyaml joblib
 ```
 
 ---
@@ -280,7 +273,7 @@ Python ecosystem:
 - PyYAML
 - joblib
 
-Bioinformatics concepts:
+Bioinformatics areas:
 
 - transcriptomics
 - pharmacogenomics
@@ -294,20 +287,21 @@ Bioinformatics concepts:
 Potential extensions of this project include:
 
 - training models for multiple drugs
-- cross-drug prediction benchmarking
-- feature stability analysis
-- SHAP model interpretation
-- integration of mutation or copy-number features
-- drug response classification models
+- benchmarking additional algorithms (Random Forest, XGBoost)
+- SHAP feature importance analysis
+- multi-omics integration (mutation + expression)
+- cross-drug prediction models
 
 ---
 
 # Why This Project Matters
 
-Predicting drug response from molecular data is a key goal of **precision oncology**.
+Predicting drug response from molecular data is a key challenge in **precision oncology**.
 
 This project demonstrates how:
 
-- machine learning models can be applied to high-dimensional transcriptomic data
-- model features can be interpreted biologically
-- computational pipelines can link predictive modelling with pathway-level insights.
+- machine learning can model drug sensitivity from transcriptomic data
+- feature selection can identify biologically meaningful genes
+- pathway enrichment can translate predictive models into **biological insight**
+
+Such approaches contribute to the development of **computational methods for personalised cancer therapy**.
