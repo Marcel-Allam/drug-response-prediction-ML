@@ -1,176 +1,313 @@
-# Cross-Dataset Drug Response Prediction (GDSC → DepMap)
+# Drug Response Prediction from Transcriptomic Profiles
 
-Predict compound response (IC50 / AUC / viability) from baseline gene expression profiles and evaluate cross-dataset generalisation.
+Machine learning pipeline for predicting **cancer drug response (IC50)** from **gene expression data**, followed by **biological pathway enrichment analysis** to interpret model features.
 
-This repository is designed as a **portfolio-quality translational ML project**:
-- strong reproducibility (pinned environment + config-driven runs)
-- leak-resistant evaluation (proper CV + external validation)
-- interpretable baselines (Elastic Net)
-- extensible to tree models / neural nets
-- explicit cross-dataset robustness analysis
+This project demonstrates how **machine learning models trained on transcriptomic data can identify biologically meaningful pathways associated with drug sensitivity.**
 
----
+The pipeline integrates:
 
-## 1) Biological question
-
-Can baseline transcriptomic profiles of cancer cell lines predict **drug sensitivity**, and do those predictors generalise across independent pharmacogenomic datasets?
-
-Specifically:
-- Train on GDSC
-- Test on DepMap (PRISM)
-- Quantify the generalisation gap
+- transcriptomic datasets
+- pharmacological response measurements
+- ElasticNet regression modelling
+- pathway enrichment analysis
+- reproducible bioinformatics workflows
 
 ---
 
-## 2) Data sources (public)
+# Project Objective
 
-This project is set up to use:
+The goal of this project is to determine whether **gene expression profiles can predict cancer cell line sensitivity to targeted therapies** and to interpret the resulting predictive features biologically.
+
+Specifically, this project:
+
+1. Trains a **regularized regression model (ElasticNet)** to predict drug response
+2. Identifies genes most strongly associated with drug sensitivity
+3. Performs **pathway enrichment analysis** on model-selected genes
+4. Generates publication-style plots summarizing enriched pathways
+
+The project focuses on the MEK inhibitor **Selumetinib** as a case study.
+
+---
+
+# Biological Motivation
+
+Drug response in cancer is driven by complex molecular programs involving:
+
+- signalling pathway activation
+- immune response
+- metabolic state
+- transcriptional regulation
+
+While machine learning models can predict drug sensitivity, **interpreting the biological meaning of model features is essential**.
+
+This project therefore integrates **machine learning with pathway enrichment** to determine whether predictive genes converge on meaningful biological processes.
+
+---
+
+# Data Sources
+
+This project uses publicly available pharmacogenomics datasets derived from large-scale cancer cell line screens.
+
+Typical data sources used in these studies include:
 
 - **GDSC (Genomics of Drug Sensitivity in Cancer)**
-  - RNA-seq gene expression
-  - Drug response (IC50 / AUC)
+- **CCLE (Cancer Cell Line Encyclopedia)**
 
-- **DepMap (Cancer Dependency Map – PRISM Repurposing)**
-  - CCLE RNA-seq expression
-  - PRISM compound viability readouts
+These datasets contain:
 
-Download pages:
-- GDSC portal
-- DepMap portal → Downloads
+- genome-wide gene expression profiles
+- drug response measurements (IC50)
+- hundreds of cancer cell lines
 
-> Note: You must follow dataset-specific attribution and usage policies when using these data.
+For each drug, the pipeline constructs a **per-drug dataset combining gene expression features with drug response values**.
 
 ---
 
-## 3) Repository structure
+# Pipeline Overview
+
+The analysis pipeline consists of the following steps.
+
+## 1. Data Integration
+
+Gene expression data are merged with drug response measurements.
+
+Output:
 
 ```
-drug-response-prediction-ML/
-├── README.md
-├── environment.yml
-├── config/
-│   └── default_config.yaml        # experiment configuration
-├── data/
-│   ├── raw/
-│   │   ├── gdsc/                  # raw GDSC downloads (not committed)
-│   │   └── depmap/                # raw DepMap downloads (not committed)
-│   ├── interim/
-│   │   └── harmonised/            # gene-aligned datasets
-│   └── processed/
-│       └── per_drug/              # model-ready per-drug matrices
-├── models/
-│   ├── elasticnet_model.py
-│   ├── xgboost_model.py
-│   └── mlp_model.py
-├── pipelines/
-│   ├── preprocessing.py
-│   ├── evaluation.py
-│   ├── metrics.py
-│   └── calibration.py
-├── scripts/
-│   ├── 00_inspect_datasets.py
-│   ├── 01_harmonise_genes.py
-│   ├── 02_prepare_drug_datasets.py
-│   ├── 03_train_all_drugs.py
-│   ├── 04_aggregate_results.py
-│   ├── 05_calibration_analysis.py
-│   ├── 06_extract_elasticnet_coefficients.py
-│   ├── 07_shap_analysis.py
-│   ├── 08_pathway_enrichment.py
-│   └── 09_generate_summary_tables.py
-├── results/
-│   ├── metrics/
-│   ├── plots/
-│   ├── shap/
-│   └── enrichment/
-└── reports/
-    └── tables/
+data/processed/per_drug/<drug>.parquet
 ```
+
+Each dataset contains:
+
+- gene expression features
+- LN_IC50 drug response values
 
 ---
 
-## 4) Quick start
+## 2. Machine Learning Model
 
-### Create the environment
+An **ElasticNet regression model** is trained to predict drug response.
 
-```bash
-conda env create -f environment.yml
-conda activate drug_response_env
+ElasticNet was chosen because it:
+
+- performs feature selection
+- handles high-dimensional transcriptomic data
+- balances L1 and L2 regularisation
+
+Model evaluation metrics:
+
+- **R²**
+- **RMSE**
+
+Example result (Selumetinib):
+
+```
+R²   = 0.52
+RMSE = 1.30
 ```
 
-### Place raw datasets
-
-Download GDSC and DepMap files and place them into:
+Outputs:
 
 ```
-data/raw/gdsc/
-data/raw/depmap/
-```
-
-### Inspect datasets
-
-```bash
-python scripts/00_inspect_datasets.py
-```
-
-### Harmonise genes and prepare per-drug datasets
-
-```bash
-python scripts/01_harmonise_genes.py
-python scripts/02_prepare_drug_datasets.py
-```
-
-### Train models
-
-```bash
-python scripts/03_train_all_drugs.py
-```
-
-### Aggregate results and generate plots
-
-```bash
-python scripts/04_aggregate_results.py
+results/models/<drug>_elasticnet.joblib
+results/metrics/<drug>_elasticnet_metrics.json
 ```
 
 ---
 
-## 5) Outputs
+## 3. Feature Extraction
 
-- `data/interim/harmonised/`  
-  Gene-aligned expression matrices (HGNC harmonised)
+Genes with **non-zero model coefficients** are extracted as candidate predictors of drug response.
 
-- `data/processed/per_drug/`  
-  Per-drug training and testing datasets
+Two ranked feature sets are generated:
 
-- `results/metrics/*.json`  
-  Evaluation metrics per drug and model
+- **Top model features**
+- **All non-zero coefficients**
 
-- `results/plots/*.png`  
-  Performance distributions and generalisation gap plots
+Outputs:
 
-- `results/shap/`  
-  SHAP value outputs for tree models
+```
+results/metrics/<drug>_elasticnet_top_features.csv
+results/metrics/<drug>_elasticnet_all_nonzero_features.csv
+```
 
-- `results/enrichment/`  
-  Pathway enrichment results for top predictive genes
+Gene symbols are then extracted for downstream analysis.
 
 ---
 
-## 6) Evaluation framework
+## 4. Pathway Enrichment Analysis
 
-- 5-fold cross-validation within GDSC
-- External validation on DepMap
-- Median performance reporting across drugs
-- Paired Wilcoxon statistical comparison
-- Calibration curves + Brier score (classification task)
+Model-derived gene lists are analysed using **Enrichr via gseapy** to identify enriched biological pathways.
+
+Databases queried:
+
+- KEGG
+- Reactome
+- Gene Ontology (Biological Process)
+
+Outputs:
+
+```
+results/enrichment/<drug>_kegg_enrichment.csv
+results/enrichment/<drug>_reactome_enrichment.csv
+results/enrichment/<drug>_gobp_enrichment.csv
+```
+
+Significant results:
+
+```
+results/enrichment/*_enrichment_sig.csv
+```
 
 ---
 
-## 7) Future improvements
+## 5. Visualization
 
-- Compare response endpoints (IC50 vs AUC vs LFC)
-- Nested CV + model selection per drug
-- Add mutation/CNV features (multi-omics)
-- Multi-task learning across drugs
-- Stratified evaluation by tissue type
-- Cross-dataset pathway consistency analysis
+Pathway enrichment results are visualized as **bar plots of –log10(adjusted p-values)**.
+
+Outputs:
+
+```
+results/plots/<drug>_kegg_barplot.png
+results/plots/<drug>_reactome_barplot.png
+results/plots/<drug>_gobp_barplot.png
+```
+
+These figures summarise the most enriched biological processes associated with model-selected genes.
+
+---
+
+# Key Result (Selumetinib)
+
+Pathway enrichment identified a significant biological process:
+
+```
+Defense Response To Gram-negative Bacterium
+Adjusted p-value = 0.00618
+```
+
+Genes contributing to this enrichment include:
+
+```
+IL23A
+DEFA4
+DEFA3
+CTSG
+DEFA1
+LYZ
+TLR4
+LYPD8
+```
+
+These genes are involved in **innate immune signalling and inflammatory responses**, suggesting that transcriptional immune programs may be associated with Selumetinib sensitivity across cell lines.
+
+While further validation is required, this demonstrates that **machine learning-derived gene sets can recover biologically meaningful pathways.**
+
+---
+
+# Repository Structure
+
+```
+drug-response-prediction-ML
+
+config/
+    default_config.yaml
+
+data/
+    processed/
+
+scripts/
+    04_train_elasticnet_model.py
+    05_extract_gene_symbols.py
+    06_run_pathway_enrichment.py
+    07_plot_enrichment_results.py
+
+results/
+    enrichment/
+    metrics/
+    models/
+    plots/
+```
+
+---
+
+# Example Usage
+
+Train the model:
+
+```bash
+python scripts/04_train_elasticnet_model.py \
+--config config/default_config.yaml \
+--drug "Selumetinib"
+```
+
+Extract gene symbols:
+
+```bash
+python scripts/05_extract_gene_symbols.py \
+--drug "Selumetinib" \
+--source all_nonzero_features \
+--top_n 250
+```
+
+Run pathway enrichment:
+
+```bash
+python scripts/06_run_pathway_enrichment.py \
+--drug "Selumetinib" \
+--source all_nonzero_features \
+--top_n 250
+```
+
+Generate plots:
+
+```bash
+python scripts/07_plot_enrichment_results.py \
+--drug "Selumetinib"
+```
+
+---
+
+# Technologies Used
+
+Python ecosystem:
+
+- pandas
+- numpy
+- scikit-learn
+- matplotlib
+- gseapy
+- PyYAML
+- joblib
+
+Bioinformatics concepts:
+
+- transcriptomics
+- pharmacogenomics
+- pathway enrichment
+- machine learning for omics data
+
+---
+
+# Future Improvements
+
+Potential extensions of this project include:
+
+- training models for multiple drugs
+- cross-drug prediction benchmarking
+- feature stability analysis
+- SHAP model interpretation
+- integration of mutation or copy-number features
+- drug response classification models
+
+---
+
+# Why This Project Matters
+
+Predicting drug response from molecular data is a key goal of **precision oncology**.
+
+This project demonstrates how:
+
+- machine learning models can be applied to high-dimensional transcriptomic data
+- model features can be interpreted biologically
+- computational pipelines can link predictive modelling with pathway-level insights.
