@@ -1,16 +1,17 @@
-# data
+# data (large files)
 data/raw/
+data/interim/
 data/processed/
 
-# outputs
+# trained models
 results/models/
-results/figures/
-results/metrics/
 
 # python
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
+
+# environments
 .env
 .venv
 
