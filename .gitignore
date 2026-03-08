@@ -6,7 +6,6 @@ data/processed/
 results/models/
 results/figures/
 results/metrics/
-reports/tables/
 
 # python
 __pycache__/

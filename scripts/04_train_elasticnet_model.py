@@ -224,6 +224,7 @@ def save_outputs(
 
     metrics_path = metrics_dir / f"{drug_slug}_elasticnet_metrics.json"
     top_features_path = metrics_dir / f"{drug_slug}_elasticnet_top_features.csv"
+    all_nonzero_features_path = metrics_dir / f"{drug_slug}_elasticnet_all_nonzero_features.csv"
     model_path = models_dir / f"{drug_slug}_elasticnet.joblib"
 
     metrics = {
@@ -247,8 +248,9 @@ def save_outputs(
         }
     )
     coef_df["abs_coefficient"] = coef_df["coefficient"].abs()
-    coef_df = coef_df.sort_values("abs_coefficient", ascending=False).head(25)
-    coef_df.to_csv(top_features_path, index=False)
+    coef_df_sorted = coef_df.sort_values("abs_coefficient", ascending=False)
+    coef_df_sorted.head(25).to_csv(top_features_path, index=False)
+    coef_df_sorted[coef_df_sorted["abs_coefficient"] > 0]
 
     artifact = {
         "scaler": scaler,
@@ -260,6 +262,7 @@ def save_outputs(
 
     log_info(f"Saved metrics: {metrics_path}")
     log_info(f"Saved top features: {top_features_path}")
+    log_info(f"Saved all non-zero features: {all_nonzero_features_path}")
     log_info(f"Saved model artifact: {model_path}")
 
 
