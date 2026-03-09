@@ -1,0 +1,11 @@
+{
+  "dataset": "/home/marcel/projects/drug-response-prediction-ML/data/processed/per_drug/selumetinib.parquet",
+  "n_samples": 1261,
+  "n_features": 19215,
+  "test_size": 0.2,
+  "random_state": 42,
+  "r2": 0.5246899093984115,
+  "rmse": 1.2958540932665685,
+  "best_alpha": 0.2811768697974228,
+  "best_l1_ratio": 0.1
+}

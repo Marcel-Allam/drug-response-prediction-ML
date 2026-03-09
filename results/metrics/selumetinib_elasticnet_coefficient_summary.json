@@ -1,0 +1,9 @@
+{
+  "n_nonzero_features": 891,
+  "max_positive_coefficient": 0.0725185520599635,
+  "min_negative_coefficient": -0.0665135341431372,
+  "mean_abs_coefficient": 0.012736445403714118,
+  "median_abs_coefficient": 0.0094810409719371,
+  "n_positive_coefficients": 472,
+  "n_negative_coefficients": 419
+}
